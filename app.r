@@ -9,8 +9,8 @@ ui <- dashboardPage(
     menuItem("PartA", tabName = "PartA"),
     menuItem("Sandhya One", tabName = "sandhya_one"),
     menuItem("Sandhya Two", tabName = "sandhya_two"),
-    menuItem("Sandhya Color", tabName = "sandhya_color"),
-    menuItem("Sandhya Map", tabName = "sandhya_map")
+    menuItem("Sandhya Map", tabName = "sandhya_map"),
+    menuItem("Sandhya Three", tabName = "sandhya_color")
   )),
   dashboardBody(
     tabItems(
@@ -126,43 +126,6 @@ ui <- dashboardPage(
                 )
               )),
       
-      tabItem(tabName = "sandhya_color",
-              fluidRow(
-                box(plotOutput("plot_three")),
-                
-                box(
-                  title = "Controls",
-                  
-                  checkboxInput(
-                    inputId = "playoffs3",
-                    label = strong("Made it to Playoffs"),
-                    value = FALSE
-                  ), 
-                  
-                  checkboxInput(
-                    inputId = "superbowl3",
-                    label = strong("Made it to Superbowl"),
-                    value = FALSE
-                  ),
-                  
-                  selectInput(
-                    inputId = "n_breaks4",
-                    label = "Number of bins in histogram (approximate):",
-                    choices = c(10, 20, 35, 50),
-                    selected = 20
-                  )
-                  
-                  #,
-                  
-                  # checkboxInput(
-                  #   inputId = "colored",
-                  #   label = strong("Show by Wins and Losses"),
-                  #   value = FALSE
-                  # )
-                  
-                )
-              )),
-      
       tabItem(tabName = "sandhya_map",
               fluidRow(
                 box(width=12,leafletOutput(outputId = "plot_map", height = "600px"))
@@ -175,6 +138,32 @@ ui <- dashboardPage(
                   #   value = FALSE
                   # )
                   
+              )),
+      
+      tabItem(tabName = "sandhya_color",
+              fluidRow(
+                box(plotOutput("plot_color")),
+                
+                box(
+                  title = "Controls",
+                  
+                  selectInput(
+                    inputId = "fill_by_color",
+                    label = "Fill by:",
+                    choices = c("Nothing","Made it to Playoffs", "Won Superbowl"),
+                    selected = "Nothing"
+                  ), 
+                  
+                  sliderInput(
+                    inputId = "bw_adjust_col",
+                    label = "Bandwidth adjustment:",
+                    min = 0.2,
+                    max = 2,
+                    value = 1,
+                    step = 0.2
+                  )
+
+                )
               ))
       
       
@@ -260,34 +249,43 @@ server <- function(input, output) {
     return(plt)
   })
   
-  output$sandhya_color <- renderPlot({
-    data <- joined
-    full_data <- dplyr::select(joined, weekly_attendance, playoffs, sb_winner)
-    full_data <- mutate(full_data, playoff_data = 
-                          ifelse(playoffs == "Playoffs", weekly_attendance, NA ))
+  output$plot_color <- renderPlot({
+    attendance_subset <- dplyr::select(attendance, team_name, year, weekly_attendance)
+    attendance_subset <- attendance_subset %>%
+      group_by(team_name, year) %>%
+      summarize(weekly_attendance = mean(weekly_attendance, na.rm = TRUE))
+    # attendance_subset has team, year, weekly attendance
     
-    full_data <- mutate(full_data, sb_data = 
-                          ifelse(sb_winner == "Won Superbowl", weekly_attendance, NA ))
+    standings_subset <- dplyr::select(standings, team_name, year, playoffs, sb_winner)
     
-    plt <- ggplot(full_data) +  
-      geom_histogram(aes(x = weekly_attendance), bins = input$n_breaks4)
+    combined_subset <- attendance_subset %>% dplyr::left_join(standings_subset, 
+                                            by = c("team_name" = "team_name",
+                                                   "year" = "year"))
     
-    if(input$playoffs3){
-      # data <- filter(full_data, playoffs == "Playoffs")
-      # plt2 <- ggplot(data, aes(x = weekly_attendance)) +  
-      #   geom_histogram(bins = input$n_breaks3)
-      # plt <- plt + plt2
-      plt <- plt + geom_histogram(aes(x = playoff_data), bins = input$n_breaks4, color = "blue")
-      
+    if(input$fill_by_color == "Nothing"){
+      plt <- ggplot(combined_subset) + geom_density(aes(x = weekly_attendance), fill = "light blue", adjust = input$bw_adjust_col)
+    } else if(input$fill_by_color == "Won Superbowl"){
+      plt <- ggplot(combined_subset) + geom_density(aes(x = weekly_attendance, fill = sb_winner), alpha = 0.5, adjust = input$bw_adjust_col)
+    } else{
+      plt <- ggplot(combined_subset) + geom_density(aes(x = weekly_attendance, fill = playoffs), alpha = 0.5, adjust = input$bw_adjust_col)
     }
     
-    if(input$superbowl3){
-      # data <- filter(full_data, sb_winner == "Won Superbowl")
-      # plt3 <- ggplot(data, aes(x = weekly_attendance)) +  
-      #   geom_histogram(bins = input$n_breaks3)
-      # plt <- plt + plt3
-      plt <- plt + geom_histogram(aes(x = sb_data), bins = input$n_breaks4, color = "green")
-    }
+    plt <- plt + xlab("Average Weekly Attendance") + ylab("Density")
+    
+    ###
+    
+    # full_data <- dplyr::select(joined, weekly_attendance, playoffs, sb_winner)
+    # full_data <- mutate(full_data, playoff_data = 
+    #                       ifelse(playoffs == "Playoffs", weekly_attendance, NA ))
+    # 
+    # full_data <- mutate(full_data, sb_data = 
+    #                       ifelse(sb_winner == "Won Superbowl", weekly_attendance, NA ))
+    # 
+    # plt <- ggplot(full_data) +  
+    #   geom_histogram(aes(x = weekly_attendance), bins = input$n_breaks2_new)
+    # 
+    # plt <- ggplot(full_data) +  
+    #   geom_density(aes(x = weekly_attendance))
     
     return(plt)
   })
