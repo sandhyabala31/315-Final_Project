@@ -257,35 +257,25 @@ server <- function(input, output) {
     # attendance_subset has team, year, weekly attendance
     
     standings_subset <- dplyr::select(standings, team_name, year, playoffs, sb_winner)
-    
+
     combined_subset <- attendance_subset %>% dplyr::left_join(standings_subset, 
                                             by = c("team_name" = "team_name",
                                                    "year" = "year"))
     
     if(input$fill_by_color == "Nothing"){
-      plt <- ggplot(combined_subset) + geom_density(aes(x = weekly_attendance), fill = "light blue", adjust = input$bw_adjust_col)
+      plt <- ggplot(combined_subset) + 
+        geom_density(aes(x = weekly_attendance), fill = "light blue", adjust = input$bw_adjust_col)
     } else if(input$fill_by_color == "Won Superbowl"){
-      plt <- ggplot(combined_subset) + geom_density(aes(x = weekly_attendance, fill = sb_winner), alpha = 0.5, adjust = input$bw_adjust_col)
+      plt <- ggplot(combined_subset) + 
+        geom_density(aes(x = weekly_attendance, fill = sb_winner), alpha = 0.5, adjust = input$bw_adjust_col) +
+        labs(fill = "Superbowl Outcome")
     } else{
-      plt <- ggplot(combined_subset) + geom_density(aes(x = weekly_attendance, fill = playoffs), alpha = 0.5, adjust = input$bw_adjust_col)
+      plt <- ggplot(combined_subset) + 
+        geom_density(aes(x = weekly_attendance, fill = playoffs), alpha = 0.5, adjust = input$bw_adjust_col) +
+        labs(fill = "Playoffs Outcome")
     }
     
     plt <- plt + xlab("Average Weekly Attendance") + ylab("Density")
-    
-    ###
-    
-    # full_data <- dplyr::select(joined, weekly_attendance, playoffs, sb_winner)
-    # full_data <- mutate(full_data, playoff_data = 
-    #                       ifelse(playoffs == "Playoffs", weekly_attendance, NA ))
-    # 
-    # full_data <- mutate(full_data, sb_data = 
-    #                       ifelse(sb_winner == "Won Superbowl", weekly_attendance, NA ))
-    # 
-    # plt <- ggplot(full_data) +  
-    #   geom_histogram(aes(x = weekly_attendance), bins = input$n_breaks2_new)
-    # 
-    # plt <- ggplot(full_data) +  
-    #   geom_density(aes(x = weekly_attendance))
     
     return(plt)
   })
@@ -295,11 +285,6 @@ server <- function(input, output) {
     
     states <- states(cb=T)
     
-    # Let's quickly map that out
-    #plt <- states %>% leaflet() %>% addTiles() %>% addPolygons(popup=~NAME) %>%
-    #  fitBounds(-124.39,25.82,-66.94,49.38)
-    #   %>% setView(lng= 37.090240,lat = -95.712891, zoom = 1)
-    
     sub_data <- select(attendance, team, weekly_attendance)
     sub_data_avg <- sub_data %>%
       group_by(team) %>%
@@ -308,25 +293,27 @@ server <- function(input, output) {
     states_csv <- read_csv("https://raw.githubusercontent.com/sandhyabala31/315-Final_Project/main/states2.csv")
     
     sub_data_joined <- sub_data_avg %>% dplyr::left_join(states_csv, by = c("team" = "Input"))
-      #summarise_at(vars(-weekly_attendance), funs(mean(., na.rm=TRUE)))
-    
+
     sub_data_joined <- select(sub_data_joined, avg_attendance, State)
     
-    #AVERAGE OR SUM?
+    #AVERAGE OR SUM? - SUMMED
     sub_data_joined2 <- sub_data_joined %>%
       group_by(State) %>%
       summarize(new_col = sum(avg_attendance, na.rm = TRUE))
     
     states_merged_sb <- geo_join(states, sub_data_joined2, "NAME", "State")
     
-    # Creating a color palette based on the number range in the total column
-    pal <- colorNumeric("Greens", domain=states_merged_sb$new_col)
-    
     # Getting rid of rows with NA values
     states_merged_sb <- subset(states_merged_sb, !is.na(new_col))
     
+    #Rounding it to whole number
+    states_merged_sb <- mutate(states_merged_sb, new_col = round(new_col, 0))
+    
+    # Creating a color palette based on the number range in the total column
+    pal <- colorNumeric("Reds", domain=states_merged_sb$new_col)
+    
     # Setting up the pop up text
-    popup_sb <- paste0("Total: ", as.character(states_merged_sb$new_col))
+    popup_sb <- paste0(states_merged_sb$NAME, "'s total: ", as.character(states_merged_sb$new_col))
     
     # Mapping it with the new tiles CartoDB.Positron
     plt <- leaflet() %>%
@@ -341,7 +328,7 @@ server <- function(input, output) {
       addLegend(pal = pal, 
                 values = states_merged_sb$new_col, 
                 position = "bottomright", 
-                title = "Starbucks")
+                title = "Average Weekly Attendance")
     
     return(plt)
     
